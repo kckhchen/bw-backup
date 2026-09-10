@@ -308,7 +308,7 @@ if [ -f "$LAUNCH_AGENT_PLIST" ]; then
     if confirm "Reinstall it?"; then INSTALL_AGENT=1; else INSTALL_AGENT=0; fi
 else
     dim "A LaunchAgent can remind you to back up on a schedule."
-    if confirm "Install a monthly reminder (1st of each month, 12:00)?"; then
+    if confirm "Install a reminder twice a month (1st and 15th, 12:00)?"; then
         INSTALL_AGENT=1
     else
         INSTALL_AGENT=0
@@ -332,11 +332,18 @@ if [ "${INSTALL_AGENT:-0}" -eq 1 ]; then
         <string>$ALERTER_SCRIPT</string>
     </array>
     <key>StartCalendarInterval</key>
-    <dict>
-        <key>Day</key><integer>1</integer>
-        <key>Hour</key><integer>12</integer>
-        <key>Minute</key><integer>0</integer>
-    </dict>
+    <array>
+        <dict>
+            <key>Day</key><integer>1</integer>
+            <key>Hour</key><integer>12</integer>
+            <key>Minute</key><integer>0</integer>
+        </dict>
+        <dict>
+            <key>Day</key><integer>15</integer>
+            <key>Hour</key><integer>12</integer>
+            <key>Minute</key><integer>0</integer>
+        </dict>
+    </array>
     <key>StandardOutPath</key>
     <string>$HOME/Library/Logs/bw-backup-alerter.log</string>
     <key>StandardErrorPath</key>

@@ -61,8 +61,8 @@ brew install bitwarden-cli terminal-notifier
 First, clone this repository and go to the project directory:
 
 ```bash
-git clone https://github.com/kckhchen/minimalistic-bitwarden-backup.git
-cd minimalistic-bitwarden-backup
+git clone https://github.com/kckhchen/bw-backup.git
+cd bw-backup
 ```
 
 Copy the `.env.example` file in the repository and rename it `.env` before configuring.

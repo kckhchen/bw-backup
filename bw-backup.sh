@@ -84,6 +84,60 @@ kc_get() {
     security find-generic-password -a "$USER" -s "$1" -w 2>/dev/null
 }
 
+# "2026-09-10T14:13:13.817Z" -> "2026-09-10 22:13" in local time (falls back to input)
+iso_to_local() {
+    local s="${1%%.*}" epoch
+    s="${s%Z}"
+    epoch=$(date -j -u -f "%Y-%m-%dT%H:%M:%S" "$s" "+%s" 2>/dev/null) || { printf '%s' "$1"; return; }
+    date -r "$epoch" "+%Y-%m-%d %H:%M"
+}
+
+# whole days between an ISO timestamp and now (empty on parse failure)
+iso_age_days() {
+    local s="${1%%.*}" epoch
+    s="${s%Z}"
+    epoch=$(date -j -u -f "%Y-%m-%dT%H:%M:%S" "$s" "+%s" 2>/dev/null) || return 1
+    echo $(( ($(date +%s) - epoch) / 86400 ))
+}
+
+# map bw sync output to a concrete fix the user can act on
+sync_hint() {
+    local out="$1"
+    case "$out" in
+    *"not logged in"*|*unauthenticated*|*Unauthorized*|*401*|*invalid_grant*|*"Access token"*|*"refresh token"*|*expired*)
+        echo "Your CLI login token has expired or was revoked.
+In Terminal run:
+    bw logout
+then run bw-backup again. It will re-login from your Keychain.
+If that also fails, your API key may have been rotated. Run ./setup.sh."
+        ;;
+    *ENOTFOUND*|*EAI_AGAIN*|*ECONNREFUSED*|*ECONNRESET*|*ETIMEDOUT*|*"fetch failed"*|*getaddrinfo*|*"Network error"*|*"network"*|*certificate*|*"self signed"*)
+        echo "The Bitwarden server could not be reached.
+Check your internet connection, VPN, firewall or proxy${BW_SERVER:+, and confirm that $BW_SERVER is reachable}."
+        ;;
+    *429*|*"Too Many Requests"*|*"rate limit"*|*"Slow down"*)
+        echo "The Bitwarden server is rate-limiting this client.
+Wait a few minutes and run bw-backup again."
+        ;;
+    *"50"[0-9]*|*"Service Unavailable"*|*"Bad Gateway"*|*"Gateway Timeout"*|*maintenance*)
+        echo "The Bitwarden server returned an error.
+Check https://status.bitwarden.com and try again later."
+        ;;
+    *"Vault is locked"*|*"session"*)
+        echo "The CLI session was rejected.
+In Terminal run:
+    bw lock
+then run bw-backup again."
+        ;;
+    *)
+        echo "Cause not recognised. The most reliable fix is to reset the CLI login:
+    bw logout
+then run bw-backup again. If it keeps failing, check the log at
+    $LOG_FILE"
+        ;;
+    esac
+}
+
 CLEANED=0
 cleanup() {
     [ "$CLEANED" -eq 1 ] && return 0
@@ -284,8 +338,9 @@ osascript -e 'display dialog "Authentication succeeded. Backup has started. You 
 BACKUP_PID=$!
 
 log_message "INFO" "Syncing vault..."
-bw sync -f >>"LOG_FILE" 2>&1
+SYNC_OUTPUT=$(bw sync -f 2>&1)
 SYNC_RC=$?
+[ -n "$SYNC_OUTPUT" ] && log_message "INFO" "sync output: $SYNC_OUTPUT"
 
 STATUS_JSON=$(bw status 2>/dev/null)
 LAST_SYNC=$(bw_field "$STATUS_JSON" lastSync)
@@ -300,9 +355,39 @@ Try this in Terminal:
     bw sync -f"
 fi
 
+# sync failed: do not silently fall back to the cache. Tell the user why,
+# how to fix it, and let them decide whether a stale backup is still wanted.
 if [ $SYNC_RC -ne 0 ]; then
-    log_message "WARNING" "sync -f returned $SYNC_RC, using cached data from $LAST_SYNC"
-    SYNC_WARNING=" (offline, cached)"
+    SYNC_HINT=$(sync_hint "$SYNC_OUTPUT")
+    LAST_SYNC_LOCAL=$(iso_to_local "$LAST_SYNC")
+    CACHE_AGE=$(iso_age_days "$LAST_SYNC")
+    SYNC_REASON=$(printf '%s' "$SYNC_OUTPUT" | grep -v '^\s*$' | head -1 | cut -c1-160)
+
+    log_message "ERROR" "sync -f failed (exit $SYNC_RC): ${SYNC_OUTPUT:-<no output>}"
+    log_message "WARNING" "Suggested fix: $SYNC_HINT"
+
+    kill_spinner "$BACKUP_PID"
+    osascript - "Vault sync failed. The backup would contain CACHED data, not your live vault.
+
+Last successful sync: $LAST_SYNC_LOCAL${CACHE_AGE:+ ($CACHE_AGE days ago)}
+Reason: ${SYNC_REASON:-no output from bw sync (exit $SYNC_RC)}
+
+How to fix:
+$SYNC_HINT
+
+Back up the cached data anyway, or Cancel and fix the problem first?" <<'OSA' >/dev/null 2>>"$LOG_FILE"
+on run argv
+    display dialog (item 1 of argv) with title "Minimalistic Bitwarden Backup Tool" ¬
+        buttons {"Cancel", "Back Up Cached Data"} default button "Back Up Cached Data" ¬
+        cancel button "Cancel" with icon caution
+end run
+OSA
+    if [ $? -ne 0 ]; then
+        log_message "INFO" "User cancelled after sync failure. No backup written."
+        exit 1
+    fi
+    log_message "WARNING" "User chose to back up cached data from $LAST_SYNC"
+    SYNC_WARNING=" (sync failed, cached data from $LAST_SYNC_LOCAL)"
 fi
 
 ITEM_COUNT=$(bw list items 2>>"$LOG_FILE" | grep -o '"object":"item"' | wc -l | tr -d ' ')
@@ -348,6 +433,12 @@ kill_spinner "$BACKUP_PID"
 notify "Minimalistic Bitwarden Backup Tool" \
     "Backup complete — $ITEM_COUNT items${SYNC_WARNING}. Click to open the backup folder." \
     "open '$BACKUP_DIR'"
+
+if [ -n "$SYNC_WARNING" ]; then
+    notify "Bitwarden Backup" \
+        "This backup is from cached data. Fix the sync problem and back up again. Click to open the log." \
+        "open '$LOG_FILE'"
+fi
 
 if [ "$REAUTH_HAPPENED" -eq 1 ]; then
     notify "Bitwarden Backup" \

@@ -252,10 +252,12 @@ then re-run setup."
         export BW_SESSION="$VSESSION"
         ok "Unlock succeeded (session key length: ${#VSESSION})"
 
-        if bw sync -f >/dev/null 2>&1; then
+        VSYNC_OUT=$(bw sync -f 2>&1)
+        if [ $? -eq 0 ]; then
             ok "Sync succeeded"
         else
-            warn "Sync returned non-zero — check your network"
+            warn "Sync failed: ${VSYNC_OUT:-no output}"
+            dim "Check your network. If the error mentions a token or authorization, run: bw logout && ./setup.sh"
         fi
 
         VLAST=$(bw_field "$(bw status 2>/dev/null)" lastSync)

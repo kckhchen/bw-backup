@@ -133,6 +133,24 @@ Unfortunately currently there's no way around this limitation as the `bw export`
 
 When the script runs, it creates a log file at `~/Library/Logs/bw-backup.log`. You can check the log here should anything go wrong. You may also change the log file path in the `.env` file.
 
+### When Sync Fails
+
+Before exporting, the tool runs `bw sync -f` to pull the latest vault from the server. If the sync fails, it will **not** silently fall back to the local cache. Instead, a dialog tells you:
+
+- when the vault was last synced successfully and how old the cached data is,
+- the error returned by the Bitwarden CLI,
+- a concrete fix for the most common causes (expired CLI login, no network, server errors, rate limiting).
+
+You can then choose **Back Up Cached Data** to write a backup from the stale cache anyway, or **Cancel** to fix the problem first. If you go ahead with cached data, the completion notification says so and a second notification links to the log. The full CLI error is always written to the log file.
+
+The most common cause is an expired CLI login token. The fix is:
+
+```bash
+bw logout
+```
+
+then run `bw-backup` again. It will log in again using the API key stored in your Keychain.
+
 ### Possibility of Full Automation
 
 Technically this can be achieved. However, not having to manually type in the master password to initiate the backup process generally means that the user has to store the master password in plain text as an environment variable, which is dangerous practice. For this reason, manually typing the master password via the secure OS prompt is the intended design.

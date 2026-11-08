@@ -14,7 +14,9 @@ log() {
 }
 
 TITLE="Minimalistic Bitwarden Backup Reminder"
-MESSAGE="It's time to backup your vault. Click to start the backup process"
+MESSAGE="It's time to backup your vault."
+# How long the reminder stays on screen before it counts as ignored.
+GIVE_UP_AFTER="${GIVE_UP_AFTER:-3600}"
 
 if [ -z "$SCRIPT_DIR" ]; then
     log "FATAL could not resolve script directory from '$0'"
@@ -23,24 +25,40 @@ fi
 
 if [ ! -x "$BACKUP_SCRIPT" ]; then
     log "FATAL $BACKUP_SCRIPT is missing or not executable"
-    command -v terminal-notifier >/dev/null 2>&1 &&
-        terminal-notifier -title "$TITLE" \
-            -message "Backup script missing - see $LOG_FILE" -sound Basso
+    osascript - "$TITLE" "Backup script missing - see $LOG_FILE" >/dev/null 2>&1 <<'EOF'
+on run argv
+    display notification (item 2 of argv) with title (item 1 of argv) sound name "Basso"
+end run
+EOF
     exit 1
 fi
 
-EXEC_CMD="\"$BACKUP_SCRIPT\""
+# A dialog rather than a notification: native notifications can't run a command when
+# clicked, and terminal-notifier (which could) silently shows nothing on recent macOS.
+ANSWER=$(osascript - "$TITLE" "$MESSAGE" "$GIVE_UP_AFTER" 2>>"$LOG_FILE" <<'EOF'
+on run argv
+    set r to display dialog (item 2 of argv) with title (item 1 of argv) ¬
+        buttons {"Later", "Back Up Now"} default button "Back Up Now" ¬
+        giving up after ((item 3 of argv) as integer)
+    if gave up of r then return "timeout"
+    return button returned of r
+end run
+EOF
+)
 
-if command -v terminal-notifier >/dev/null 2>&1; then
-    if terminal-notifier -title "$TITLE" -message "$MESSAGE" -execute "$EXEC_CMD"; then
-        log "OK reminder sent (clickable)"
-    else
-        log "ERROR terminal-notifier failed"
-        exit 1
-    fi
-elif osascript -e "display notification \"$MESSAGE\" with title \"$TITLE\"" >/dev/null 2>&1; then
-    log "OK reminder sent (not clickable: terminal-notifier not installed)"
-else
-    log "ERROR no notifier available"
+case "$ANSWER" in
+"Back Up Now")
+    log "OK reminder accepted, starting backup"
+    exec "$BACKUP_SCRIPT"
+    ;;
+"Later")
+    log "OK reminder shown, postponed by user"
+    ;;
+"timeout")
+    log "WARN reminder shown but no response within ${GIVE_UP_AFTER}s"
+    ;;
+*)
+    log "ERROR could not show reminder dialog"
     exit 1
-fi
+    ;;
+esac

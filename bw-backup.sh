@@ -62,18 +62,15 @@ kill_spinner() {
     [[ "$(ps -p "$1" -o comm= 2>/dev/null)" == *osascript* ]] && kill "$1" 2>/dev/null
 }
 
+# Native notification. terminal-notifier relies on the deprecated NSUserNotification
+# API, which on recent macOS reports success but never displays anything.
 notify() {
-    local title="$1" msg="$2" exec_cmd="${3:-}"
-    if command -v terminal-notifier >/dev/null 2>&1; then
-        if [ -n "$exec_cmd" ]; then
-            terminal-notifier -title "$title" -message "$msg" -execute "$exec_cmd"
-        else
-            terminal-notifier -title "$title" -message "$msg"
-        fi
-    else
-        osascript -e "display notification \"$msg\" with title \"$title\"" >/dev/null 2>&1
-        log_message "WARNING" "terminal-notifier not found, fell back to native notification."
-    fi
+    local title="$1" msg="$2"
+    osascript - "$title" "$msg" >/dev/null 2>&1 <<'EOF'
+on run argv
+    display notification (item 2 of argv) with title (item 1 of argv)
+end run
+EOF
 }
 
 bw_field() {
@@ -158,9 +155,6 @@ command -v osascript >/dev/null 2>&1 || die_gui "osascript missing."
 
 # log setup
 log_message "INFO" "bw version: $(bw --version 2>&1)"
-command -v terminal-notifier >/dev/null 2>&1 &&
-    log_message "INFO" "terminal-notifier: $(command -v terminal-notifier)" ||
-    log_message "INFO" "terminal-notifier"
 
 if [[ ! "$KEEP_LAST_N" =~ ^[0-9]+$ ]] || [ "$KEEP_LAST_N" -lt 1 ]; then
     echo "Invalid KEEP_LAST_N ('$KEEP_LAST_N'), falling back to 3." >>"$LOG_FILE"
@@ -431,13 +425,11 @@ kill_spinner "$BACKUP_PID"
 
 # notify user about completion
 notify "Minimalistic Bitwarden Backup Tool" \
-    "Backup complete — $ITEM_COUNT items${SYNC_WARNING}. Click to open the backup folder." \
-    "open '$BACKUP_DIR'"
+    "Backup complete — $ITEM_COUNT items${SYNC_WARNING}. Saved to $BACKUP_DIR."
 
 if [ -n "$SYNC_WARNING" ]; then
     notify "Bitwarden Backup" \
-        "This backup is from cached data. Fix the sync problem and back up again. Click to open the log." \
-        "open '$LOG_FILE'"
+        "This backup is from cached data. Fix the sync problem and back up again. See $LOG_FILE."
 fi
 
 if [ "$REAUTH_HAPPENED" -eq 1 ]; then

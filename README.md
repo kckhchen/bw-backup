@@ -3,7 +3,7 @@
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 ![Platform](https://img.shields.io/badge/platform-macOS-lightgrey)
 
-This is a lightweight automated shell script tool that backups your Bitwarden vault in an instant on macOS. It utilizes the official [bitwarden-cli](https://bitwarden.com/help/cli/) to authenticate and automatically store backups, exporting a **portable (password-protected)** JSON file that you can import back to Bitwarden or other supported password managers (e.g. [KeePassXC](https://keepassxc.org/)). You can even set up reminders with [terminal-notifier](https://github.com/julienXX/terminal-notifier) to send notifications when it's time for backup so you'll never forget.
+This is a lightweight automated shell script tool that backups your Bitwarden vault in an instant on macOS. It utilizes the official [bitwarden-cli](https://bitwarden.com/help/cli/) to authenticate and automatically store backups, exporting a **portable (password-protected)** JSON file that you can import back to Bitwarden or other supported password managers (e.g. [KeePassXC](https://keepassxc.org/)). You can even set up a scheduled reminder that pops up when it's time for backup so you'll never forget.
 
 Although Bitwarden [stores local cache for 30 days](https://bitwarden.com/blog/configuring-bitwarden-clients-for-offline-access/#staying-logged-in-to-browser-extension-desktop-and-mobile-clients) when you go offline, it always gives a peace of mind if you know you have a secure local backup copy in your hard drive or USB thumb drive. It's also hard to keep track of all your backups, or you might completely forget to backup your passwords sometimes. This might be the solution.
 
@@ -13,10 +13,10 @@ Although Bitwarden [stores local cache for 30 days](https://bitwarden.com/blog/c
 ## Features
 
 - **GUI Prompts:** Uses macOS native dialogs to request the master password and send notifications. No typing passwords into the terminal.
-- **One-Click Backup**: Type the command or click on the notification, then enter your master password. Sit back and let the tool handle the rest.
+- **One-Click Backup**: Type the command or click **Back Up Now** on the reminder, then enter your master password. Sit back and let the tool handle the rest.
 - **Portable Backups:** Creates password-protected JSON exports that can be imported into _any_ Bitwarden account (unlike account-restricted backups). The backup files are protected with the same master password for your Bitwarden vault.
 - **Automated Cleanup:** Automatically keeps only the last `N` backups (configurable) to save disk space and prevent potential security threats.
-- **Reminders:** Uses `terminal-notifier` to send polite, non-intrusive notifications to you when it's time for backup (frequency configurable). You can click on the notification and start the backup whenever you're ready.
+- **Reminders:** Shows a native macOS dialog when it's time for backup (frequency configurable). Click **Back Up Now** to start right away, or **Later** to dismiss it. No extra dependencies needed.
 
 ## How to Use
 
@@ -36,11 +36,10 @@ And that's it!
 
 A dialog window will appear requesting your Bitwarden master password. Once you enter the correct password, it handles everything and stores the encrypted JSON file in the directory of your choice. You will receive a notification after ~10 seconds confirming the backup.
 
-If you set up a reminder with `LaunchAgent` (detailed below), you will receive a notification regularly that looks like this:
+If you set up a reminder with `LaunchAgent` (detailed below), a dialog will pop up regularly asking whether to back up now. Clicking **Back Up Now** brings out the same dialog requesting your master password. Enter the password and you are good to go. If you don't respond, the reminder closes itself after an hour.
 
-<img src="./assets/backup-alert.png" alt="a quick look at the notification"/>
-
-Clicking on it will bring out the same dialog requesting your master password. Enter the password and you are good to go.
+> [!note]
+> Earlier versions used [terminal-notifier](https://github.com/julienXX/terminal-notifier) for clickable notifications. It relies on a deprecated macOS API and, on recent macOS versions, reports success without ever showing anything, so it is no longer used.
 
 A little GIF showing you how easy it is:
 
@@ -50,10 +49,10 @@ A little GIF showing you how easy it is:
 
 ### Prerequisites
 
-You need to have `bitwarden-cli` and `terminal-notifier` (this is not required but recommended) installed on your macOS system. You can install them easily via [Homebrew](https://brew.sh/):
+You need to have `bitwarden-cli` installed on your macOS system. You can install it easily via [Homebrew](https://brew.sh/):
 
 ```bash
-brew install bitwarden-cli terminal-notifier
+brew install bitwarden-cli
 ```
 
 ### Configuring `.env` file
@@ -141,7 +140,7 @@ Before exporting, the tool runs `bw sync -f` to pull the latest vault from the s
 - the error returned by the Bitwarden CLI,
 - a concrete fix for the most common causes (expired CLI login, no network, server errors, rate limiting).
 
-You can then choose **Back Up Cached Data** to write a backup from the stale cache anyway, or **Cancel** to fix the problem first. If you go ahead with cached data, the completion notification says so and a second notification links to the log. The full CLI error is always written to the log file.
+You can then choose **Back Up Cached Data** to write a backup from the stale cache anyway, or **Cancel** to fix the problem first. If you go ahead with cached data, the completion notification says so and a second notification points to the log. The full CLI error is always written to the log file.
 
 The most common cause is an expired CLI login token. The fix is:
 

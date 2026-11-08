@@ -64,13 +64,6 @@ else
       brew install bitwarden-cli"
 fi
 
-if command -v terminal-notifier >/dev/null 2>&1; then
-    ok "terminal-notifier"
-else
-    warn "terminal-notifier not found — clickable notifications will be disabled."
-    dim "Install with:  brew install terminal-notifier"
-fi
-
 for f in "$BACKUP_SCRIPT" "$ALERTER_SCRIPT"; do
     [ -f "$f" ] || die "Missing file: $f"
 done
